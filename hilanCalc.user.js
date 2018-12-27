@@ -16,17 +16,19 @@
 
         var wh_perDay=[8,9,9,9,9,0,0];
 
-        var data={wh:0,standard_wh:0};
+        var data={wh:0,standard_wh:0, days:0};
         iframe.find(".cMAD").each(function(){
             if(!/^[0-9:]*$/.test($(this).find(".cDM").html())) return;
             data.standard_wh+=wh_perDay[$(this).attr("days")%7-1];
             var arr=$(this).find(".cDM").html().split(":");
             data.wh+=parseInt(arr[0])+parseInt(arr[1])/60;
+            data.days++;
         })
         data.diff=data.wh-data.standard_wh;
         function niceTime(num){
             return Math.floor(Math.abs(num))+":"+("00"+Math.round((Math.abs(num)-Math.floor(Math.abs(num)))*60)).slice(-2);
         }
+        iframe.find(".CalendarPageLastText").append('<div class="calc">סה"כ ימי עבודה: <span class="calcData">'+data.days+'</span></div>');
         iframe.find(".CalendarPageLastText").append('<div class="calc">סה"כ שעות עבודה: <span class="calcData">'+niceTime(data.wh)+'</span></div>');
         iframe.find(".CalendarPageLastText").append('<div class="calc">סה"כ שעות תקן: <span class="calcData">'+niceTime(data.standard_wh)+'</span></div>');
         iframe.find(".CalendarPageLastText").append('<div class="calc">הפרש שעות: <span class="calcData '+(data.diff<0?'red':'green')+'">'+niceTime(data.diff)+'</span></div>');
