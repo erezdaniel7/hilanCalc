@@ -17,7 +17,7 @@
         var wh_perDay=[8,9,9,9,9,0,0];
 
         var data={wh:0,standard_wh:0};
-        iframe.find(".projectDay").each(function(){
+        iframe.find(".cMAD").each(function(){
             if(!/^[0-9:]*$/.test($(this).find(".cDM").html())) return;
             data.standard_wh+=wh_perDay[$(this).attr("days")%7-1];
             var arr=$(this).find(".cDM").html().split(":");
