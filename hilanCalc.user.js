@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         hilanCalc
-// @version      3.1
+// @version      3.2
 // @description  calculate monthly working hours
 // @author       Daniel Erez
 // @match        https://*.net.hilan.co.il/Hilannetv2/*
@@ -12,6 +12,17 @@
 // @connect      10bis.co.il
 // ==/UserScript==
 
+/**********************************************
+
+for start get telegram notification run in the console the follow line:
+    localStorage.setItem('hilanCalc_telegram', JSON.stringify({bot_token:"**********",chat_id:"*********"}));
+for generate bot token start chat with botFather:
+    https://web.telegram.org/#/im?p=@BotFather
+for get your chat_id ask chatIDrobot:
+    https://web.telegram.org/#/im?p=@chatIDrobot
+
+***********************************************/
+
 (function() {
 
     function start(){
@@ -22,6 +33,8 @@
     }
 
     function calcData(){
+        var month=moment($("#ctl00_mp_calendar_monthChanged").html(), 'MMMM YYYY', 'he');
+        var isCurrentMonth=month.isSame(moment(), 'month');
         var data={wh:0,standard_wh:0, days:0};
         $("table#calendar_container>tbody>tr>td").each(function(){
             if(!$(this).has(".calc-dot").length) return;
@@ -38,12 +51,22 @@
         $(".CalendarPageLastText .calcData.standard-wh").html(niceTime(data.standard_wh));
         $(".CalendarPageLastText .calcData.diff").html(niceTime(data.diff)).addClass(data.diff<0?'red':'green').removeClass(data.diff>=0?'red':'green');
 
+        if(isCurrentMonth){
+            var updateText = `*עדכון נתוני חילן*\n`;
+            updateText += `חודש: *${month.format('MMMM YYYY', 'he')}*\n`;
+            updateText += `סה"כ ימי עבודה: *${data.days}*\n`;
+            updateText += `סה"כ שעות עבודה: *${niceTime(data.wh)}*\n`;
+            updateText += `סה"כ שעות תקן: *${niceTime(data.standard_wh)}*\n`;
+            updateText += `הפרש שעות: *${niceTime(data.diff)}${data.diff<0?'🔻':'✅'}*\n`;
+            sendUpdate("calcData",updateText)
+        }
     };
 
     async function calc10bisData(){
         $(".loading-10bis").show();
         $(".calc10bisEstimate").hide();
         var month=moment($("#ctl00_mp_calendar_monthChanged").html(), 'MMMM YYYY', 'he');
+        var isCurrentMonth=month.isSame(moment(), 'month');
         var data = await get10BisData(month);
         if (data==null){
             $(".loading-10bis").hide();
@@ -52,23 +75,29 @@
         }
         data.days=0;
         data.estimateDays=0;
+        data.todayIsWorkingDay=false;
         $("table#calendar_container>tbody>tr>td[days]").each(function(){
+            var isToday= month.clone().date($(this).find(".dTS").text()).isSame(moment(), 'd')
             if($(this).find(".cDM").text()=="יום ע"){
                 data.days++;
                 data.estimateDays++;
+                if (isToday) data.todayIsWorkingDay=true;
             }
             if($(this).find(".cDM").text()=="נכח"){
                 data.estimateDays++;
+                if (isToday) data.todayIsWorkingDay=true;
             }
             else if(/^[0-9:]*$/.test($(this).find(".cDM").html())){
                 var arr=$(this).find(".cDM").html().split(":");
                 if(parseInt(arr[0])>=6) {
                     data.days++;
                     data.estimateDays++;
+                    if (isToday) data.todayIsWorkingDay=true;
                 }
             }
             else if($(this).find(".cDM").text().trim()=="" && ($(this).attr("days")%7)<=5 && ($(this).attr("days")%7)>0){
                 data.estimateDays++;
+                if (isToday) data.todayIsWorkingDay=true;
             }
         })
         data.budget=data.days*37;
@@ -76,12 +105,13 @@
 
         data.estimateBudget=data.estimateDays*37;
         data.estimateDiff=data.estimateBudget-data._10bis;
-        data.estimateDiffPerDay=data.estimateDiff/(data.estimateDays-data.days-(moment().weekday()<5?1:0));
+        data.estimateDiffPerDay=data.estimateDiff/(data.estimateDays-data.days-(data.todayIsWorkingDay && (data.today>0 || moment().format("HH")>=17) ?1:0));
         $(".CalendarPageLastText .calcData.10bisuseCrdit").html(data.credit.toFixed(2)+"₪");
         $(".CalendarPageLastText .calcData.10bisuse10bis").html(data._10bis.toFixed(2)+"₪");
         $(".CalendarPageLastText .calcData.10bisBudget").html(data.budget.toFixed(2)+"₪");
         $(".CalendarPageLastText .calcData.10bisDff").html(data.diff.toFixed(2)+"₪").addClass(data.diff<0?'red':'green').removeClass(data.diff>=0?'red':'green');
         $(".CalendarPageLastText .calcData.10bisday").html(data.days);
+        $(".CalendarPageLastText .calcData.10bistoday").html(data.today.toFixed(2)+"₪");
         if(data.estimateDays!=data.days){
             $(".calc10bisEstimate").show();
             $(".CalendarPageLastText .calcData.10bisBudgetEstimate").html(data.estimateBudget.toFixed(2)+"₪");
@@ -93,13 +123,32 @@
                 $(".calc-10bis-dot").addClass("medium");
             else
                 $(".calc-10bis-dot").addClass("bad");
-            $(".calc-10bis-dot").attr("title","ממוצע ליום "+data.estimateDiffPerDay.toFixed(2));
+            if(data.estimateDiffPerDay !== Infinity){
+                $(".calc-10bis-dot").attr("title","ממוצע ליום "+data.estimateDiffPerDay.toFixed(2));
+            }
         }
         $(".loading-10bis").hide();
         $(".updated-10bis").show();
+
+        if(isCurrentMonth){
+            var updateText = `*עדכון נתוני תן ביס*\n`;
+            updateText += `חודש: *${month.format('MMMM YYYY', 'he')}*\n`;
+            updateText += `סה"כ תשלום באשראי: *${data.credit.toFixed(2)}₪*\n`;
+            updateText += `סה"כ תשלום בתן-ביס: *${data._10bis.toFixed(2)}₪*\n`;
+            updateText += `סה"כ תקציב תן ביס: *${data.budget.toFixed(2)}₪* (${data.estimateBudget.toFixed(2)}₪)\n`;
+            updateText += `יתרה תן-ביס: *${data.diff.toFixed(2)}₪${data.diff<0?'🔻':'✅'}* (${data.estimateDiff.toFixed(2)}₪${data.estimateDiff<0?'🔻':'✅'} `;
+            if(data.estimateDiffPerDay<=40) updateText += `💚`; // green
+            else if (data.estimateDiffPerDay<=50) updateText += `💛`; // yellow
+            else updateText += `❤️`;
+            updateText += `)\n`;
+            updateText += `ימי תן ביס: *${data.days}* (${data.estimateDays})\n`;
+            updateText += `נוצל היום: *${data.today.toFixed(2)}₪*\n`;
+            sendUpdate("10bis",updateText)
+        }
     }
 
     function BuildUI(){
+        var isCurrentMonth=moment($("#ctl00_mp_calendar_monthChanged").html(), 'MMMM YYYY', 'he').isSame(moment(), 'month');
         var wh_perDay=[8*60,9*60,9*60,9*60,9*60,0*60,0*60];
         var storageData=JSON.parse(localStorage.getItem('hilanCalc'));
         storageData=storageData?storageData:{};
@@ -139,6 +188,9 @@
         $(".CalendarPageLastText .calc-10bis").append('<div class="calc">סה"כ תקציב תן ביס: <span class="calcData number 10bisBudget"></span> <span class="calc10bisEstimate">(<span class="calcData number 10bisBudgetEstimate"></span>)</span</div>');
         $(".CalendarPageLastText .calc-10bis").append('<div class="calc">יתרה תן-ביס: <span class="calcData number 10bisDff"></span> <span class="calc10bisEstimate">(<span class="calcData number 10bisDffEstimate"></span><span class="calc-10bis-dot"></span>)</span></div>');
         $(".CalendarPageLastText .calc-10bis").append('<div class="calc">ימי תן ביס: <span class="calcData number 10bisday"></span> <span class="calc10bisEstimate">(<span class="calcData number 10bisdayEstimate"></span>)</span</div>');
+        if (isCurrentMonth){
+            $(".CalendarPageLastText .calc-10bis").append('<div class="calc">נוצל היום: <span class="calcData number 10bistoday"></span>');
+        }
 
     }
 
@@ -173,10 +225,12 @@
     async function get10BisData(month){
         var data={
             credit:0,
-            _10bis:0
+            _10bis:0,
+            today:0
         };
-        if(month.diff(moment().startOf('month'), 'months')>0) return data;
-        var res=await getRequest("https://www.10bis.co.il/Account/UserReport?dateBias="+month.diff(moment().startOf('month'), 'months'));
+        var monthDiff=month.diff(moment().startOf('month'), 'months');
+        if(monthDiff>0) return data;
+        var res=await getRequest("https://www.10bis.co.il/Account/UserReport?dateBias="+monthDiff);
         if($(res).find(".userReportDataTbl:eq(-1) tbody.userReportBody tr").length==0) return null;
         $(res).find(".userReportDataTbl:eq(-1) tbody.userReportBody tr").each(function(){
             var val=parseFloat($(this).find("td:eq(1)").text().trim().replace(/[^\d.-]/g, ''));
@@ -187,6 +241,12 @@
                 case "חיובים בכרטיסי אשראי":
                     data.credit=val;
                     break;
+            }
+        })
+        $(res).find(".userReportDataTbl tbody.userReportBody tr").each(function(){
+            var time=moment($(this).find("td:nth-child(2)").html().trim(), 'DD/MM/YYYY', 'he');
+            if (time.isSame(moment(), 'd')) {
+                data.today+=parseFloat($(this).find("td:nth-child(6)").text().trim().replace(/[^\d.-]/g, ''));
             }
         })
         return data;
@@ -207,5 +267,22 @@
                 }
             } );
         })
+    }
+
+    function sendUpdate(type,text){
+        var data=JSON.parse(localStorage.getItem('hilanCalc_telegram'));
+        if(!data) return;
+        if(!data.last) data.last={};
+        if(data.last && data.last[type]==text) return; // not update
+        $.ajax({
+            type: "POST",
+            url: `https://api.telegram.org/bot${data.bot_token}/sendMessage`,
+            data: {chat_id:data.chat_id,parse_mode:"Markdown",text:text},
+            dataType: "json",
+            success: ()=>{
+                data.last[type]=text;
+                localStorage.setItem('hilanCalc_telegram', JSON.stringify(data));
+            }
+        });
     }
 })();
