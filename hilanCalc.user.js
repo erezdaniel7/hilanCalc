@@ -244,6 +244,7 @@ for get your chat_id ask chatIDrobot:
             }
         })
         $(res).find(".userReportDataTbl tbody.userReportBody tr").each(function(){
+            if($(this).find("td:nth-child(2)").html()===undefined) return;
             var time=moment($(this).find("td:nth-child(2)").html().trim(), 'DD/MM/YYYY', 'he');
             if (time.isSame(moment(), 'd')) {
                 data.today+=parseFloat($(this).find("td:nth-child(6)").text().trim().replace(/[^\d.-]/g, ''));
