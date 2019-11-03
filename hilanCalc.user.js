@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         hilanCalc
-// @version      3.2
+// @version      3.3
 // @description  calculate monthly working hours
 // @author       Daniel Erez
 // @match        https://*.net.hilan.co.il/Hilannetv2/*
