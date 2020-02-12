@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         hilanCalc
-// @version      3.4
+// @version      3.4.1
 // @description  calculate monthly working hours
 // @author       Daniel Erez
 // @match        https://*.net.hilan.co.il/Hilannetv2/*
@@ -9,7 +9,7 @@
 // @grant        GM_xmlhttpRequest
 // @require      https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/locale/he.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/html2canvas/0.4.1/html2canvas.min.js
+// @require      https://html2canvas.hertzen.com/dist/html2canvas.min.js
 // @connect      10bis.co.il
 // ==/UserScript==
 
@@ -232,6 +232,7 @@ for get your chat_id ask chatIDrobot:
         var monthDiff=month.diff(moment().startOf('month'), 'months');
         if(monthDiff>0) return data;
         var res=await getRequest("https://www.10bis.co.il/Account/UserReport?dateBias="+monthDiff);
+        res = res.replace(/<img .*?>/g,"");
         if($(res).find(".userReportDataTbl:eq(-1) tbody.userReportBody tr").length==0) return null;
         $(res).find(".userReportDataTbl:eq(-1) tbody.userReportBody tr").each(function(){
             var val=parseFloat($(this).find("td:eq(1)").text().trim().replace(/[^\d.-]/g, ''));
@@ -304,16 +305,9 @@ for get your chat_id ask chatIDrobot:
     }
 
     async function html2Blob(selector){
-        return new Promise(resolve => {
-            html2canvas($(selector)[0], {
-                onrendered: function(canvas) {
-                    var image = canvas.toDataURL();
-                    fetch(image).then(res => res.blob()).then((photo) =>{
-                        resolve(photo);
-                    });
-                }
-            })
-        })
+        var canvas = await html2canvas($(selector)[0],{scale:2});
+        var image = canvas.toDataURL();
+        return (await fetch(image)).blob();
     }
 
 })();
