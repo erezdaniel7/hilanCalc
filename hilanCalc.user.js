@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         hilanCalc
-// @version      3.3
+// @version      3.4
 // @description  calculate monthly working hours
 // @author       Daniel Erez
 // @match        https://*.net.hilan.co.il/Hilannetv2/*
@@ -9,6 +9,7 @@
 // @grant        GM_xmlhttpRequest
 // @require      https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/locale/he.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/html2canvas/0.4.1/html2canvas.min.js
 // @connect      10bis.co.il
 // ==/UserScript==
 
@@ -285,5 +286,34 @@ for get your chat_id ask chatIDrobot:
                 localStorage.setItem('hilanCalc_telegram', JSON.stringify(data));
             }
         });
+        if(type == "calcData") sendUpdateImage()
     }
+
+    async function sendUpdateImage(){
+        var data=JSON.parse(localStorage.getItem('hilanCalc_telegram'));
+        var formData = new FormData();
+        formData.append("chat_id", data.chat_id);
+        formData.append("photo", await html2Blob("#calendar_container"));
+        $.ajax({
+            type: "POST",
+            url: `https://api.telegram.org/bot${data.bot_token}/sendphoto`,
+            data: formData,
+            contentType: false,
+            processData: false,
+        });
+    }
+
+    async function html2Blob(selector){
+        return new Promise(resolve => {
+            html2canvas($(selector)[0], {
+                onrendered: function(canvas) {
+                    var image = canvas.toDataURL();
+                    fetch(image).then(res => res.blob()).then((photo) =>{
+                        resolve(photo);
+                    });
+                }
+            })
+        })
+    }
+
 })();
