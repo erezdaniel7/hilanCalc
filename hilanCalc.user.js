@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         hilanCalc
-// @version      3.4.1
+// @version      3.4.2
 // @description  calculate monthly working hours
 // @author       Daniel Erez
 // @match        https://*.net.hilan.co.il/Hilannetv2/*
@@ -59,7 +59,7 @@ for get your chat_id ask chatIDrobot:
             updateText += `סה"כ שעות עבודה: *${niceTime(data.wh)}*\n`;
             updateText += `סה"כ שעות תקן: *${niceTime(data.standard_wh)}*\n`;
             updateText += `הפרש שעות: *${niceTime(data.diff)}${data.diff<0?'🔻':'✅'}*\n`;
-            sendUpdate("calcData",updateText)
+            sendUpdate("calcData",updateText,$("#calendar_container")[0])
         }
     };
 
@@ -272,40 +272,41 @@ for get your chat_id ask chatIDrobot:
         })
     }
 
-    function sendUpdate(type,text){
+    async function sendUpdate(type,text,photo_elm){
         var data=JSON.parse(localStorage.getItem('hilanCalc_telegram'));
         if(!data) return;
         if(!data.last) data.last={};
         if(data.last && data.last[type]==text) return; // not update
-        $.ajax({
-            type: "POST",
-            url: `https://api.telegram.org/bot${data.bot_token}/sendMessage`,
-            data: {chat_id:data.chat_id,parse_mode:"Markdown",text:text},
-            dataType: "json",
-            success: ()=>{
-                data.last[type]=text;
-                localStorage.setItem('hilanCalc_telegram', JSON.stringify(data));
-            }
-        });
-        if(type == "calcData") sendUpdateImage()
+        await telegramSend(data.chat_id,data.bot_token,text,photo_elm);
+        data.last[type]=text;
+        localStorage.setItem('hilanCalc_telegram', JSON.stringify(data));
     }
 
-    async function sendUpdateImage(){
-        var data=JSON.parse(localStorage.getItem('hilanCalc_telegram'));
+    async function telegramSend(chat_id, bot_token, text, photo_elm){
+        var action;
         var formData = new FormData();
-        formData.append("chat_id", data.chat_id);
-        formData.append("photo", await html2Blob("#calendar_container"));
-        $.ajax({
+        formData.append("chat_id", chat_id);
+        formData.append("parse_mode","Markdown");
+        if(photo_elm){
+            formData.append("photo", await html2Blob(photo_elm));
+            formData.append("caption",text);
+            action="sendphoto";
+        }
+        else{
+            formData.append("text",text);
+            action="sendMessage";
+        }
+        return await $.ajax({
             type: "POST",
-            url: `https://api.telegram.org/bot${data.bot_token}/sendphoto`,
+            url: `https://api.telegram.org/bot${bot_token}/${action}`,
             data: formData,
             contentType: false,
             processData: false,
         });
     }
 
-    async function html2Blob(selector){
-        var canvas = await html2canvas($(selector)[0],{scale:2});
+    async function html2Blob(elm){
+        var canvas = await html2canvas(elm,{scale:2});
         var image = canvas.toDataURL();
         return (await fetch(image)).blob();
     }
