@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         hilanCalc
-// @version      3.4.2
+// @version      3.4.3
 // @description  calculate monthly working hours
 // @author       Daniel Erez
 // @match        https://*.net.hilan.co.il/Hilannetv2/*
@@ -68,18 +68,13 @@ for get your chat_id ask chatIDrobot:
         $(".calc10bisEstimate").hide();
         var month=moment($("#ctl00_mp_calendar_monthChanged").html(), 'MMMM YYYY', 'he');
         var isCurrentMonth=month.isSame(moment(), 'month');
-        var data = await get10BisData(month);
-        if (data==null){
-            $(".loading-10bis").hide();
-            $(".error-10bis").show();
-            return;
-        }
+        var data = {};
         data.days=0;
         data.estimateDays=0;
         data.todayIsWorkingDay=false;
         $("table#calendar_container>tbody>tr>td[days]").each(function(){
             var isToday= month.clone().date($(this).find(".dTS").text()).isSame(moment(), 'd')
-            if($(this).find(".cDM").text()=="יום ע"){
+            if($(this).find(".cDM").text()=="יום ע" || $(this).find(".cDM").text()=="עבודה"){
                 data.days++;
                 data.estimateDays++;
                 if (isToday) data.todayIsWorkingDay=true;
@@ -101,6 +96,14 @@ for get your chat_id ask chatIDrobot:
                 if (isToday) data.todayIsWorkingDay=true;
             }
         })
+        var data10bis = await get10BisData(month);
+        if (data10bis==null){
+            $(".loading-10bis").hide();
+            $(".error-10bis").show();
+            return;
+        }
+        data = {...data10bis, ...data};
+
         data.budget=data.days*37;
         data.diff=data.budget-data._10bis;
 
