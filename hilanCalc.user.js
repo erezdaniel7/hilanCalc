@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         hilanCalc
-// @version      3.4.3
+// @version      3.4.4
 // @description  calculate monthly working hours
 // @author       Daniel Erez
 // @match        https://*.net.hilan.co.il/Hilannetv2/*
+// @match        https://www.10bis.co.il/next/user-report?dateBias=0
 // @exclude      https://*.net.hilan.co.il/Hilannetv2/UIV2/main.aspx
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
@@ -141,9 +142,6 @@ for get your chat_id ask chatIDrobot:
             updateText += `סה"כ תשלום בתן-ביס: *${data._10bis.toFixed(2)}₪*\n`;
             updateText += `סה"כ תקציב תן ביס: *${data.budget.toFixed(2)}₪* (${data.estimateBudget.toFixed(2)}₪)\n`;
             updateText += `יתרה תן-ביס: *${data.diff.toFixed(2)}₪${data.diff<0?'🔻':'✅'}* (${data.estimateDiff.toFixed(2)}₪${data.estimateDiff<0?'🔻':'✅'} `;
-            if(data.estimateDiffPerDay<=40) updateText += `💚`; // green
-            else if (data.estimateDiffPerDay<=50) updateText += `💛`; // yellow
-            else updateText += `❤️`;
             updateText += `)\n`;
             updateText += `ימי תן ביס: *${data.days}* (${data.estimateDays})\n`;
             updateText += `נוצל היום: *${data.today.toFixed(2)}₪*\n`;
@@ -219,13 +217,6 @@ for get your chat_id ask chatIDrobot:
         return Math.floor(Math.floor(Math.abs(num/60)))+":"+("00"+Math.abs(num)%60).slice(-2);
     }
 
-    buildStyle();
-    setInterval(start, 1000);
-    start();
-
-
-
-
     async function get10BisData(month){
         var data={
             credit:0,
@@ -234,35 +225,41 @@ for get your chat_id ask chatIDrobot:
         };
         var monthDiff=month.diff(moment().startOf('month'), 'months');
         if(monthDiff>0) return data;
-        var res=await getRequest("https://www.10bis.co.il/Account/UserReport?dateBias="+monthDiff);
-        res = res.replace(/<img .*?>/g,"");
-        if($(res).find(".userReportDataTbl:eq(-1) tbody.userReportBody tr").length==0) return null;
-        $(res).find(".userReportDataTbl:eq(-1) tbody.userReportBody tr").each(function(){
-            var val=parseFloat($(this).find("td:eq(1)").text().trim().replace(/[^\d.-]/g, ''));
-            switch($(this).find("td:eq(0)").text().trim()) {
-                case "חיובים בכרטיסי תן ביס":
-                    data._10bis=val;
+        var res = await postRequest("https://www.10bis.co.il/NextApi/UserTransactionsReport", {
+            Culture: "he-IL",
+            DateBias: monthDiff,
+            UiCulture: "he",
+            UserToken: await get10BisToken()
+        });
+        res = JSON.parse(res);
+        res.Data.totals.payments.forEach(payment =>{
+            switch(payment.paymentMethod.trim()) {
+                case "Moneycard":
+                    data._10bis=payment.total;
                     break;
-                case "חיובים בכרטיסי אשראי":
-                    data.credit=val;
+                case "Creditcard":
+                    data.credit=payment.total;
                     break;
             }
         })
-        $(res).find(".userReportDataTbl tbody.userReportBody tr").each(function(){
-            if($(this).find("td:nth-child(2)").html()===undefined) return;
-            var time=moment($(this).find("td:nth-child(2)").html().trim(), 'DD/MM/YYYY', 'he');
+        res.Data.orderList.forEach(order =>{
+            var time=moment(order.orderDateStr.trim(), 'DD/MM/YY', 'he');
             if (time.isSame(moment(), 'd')) {
-                data.today+=parseFloat($(this).find("td:nth-child(6)").text().trim().replace(/[^\d.-]/g, ''));
+                data.today+=order.total;
             }
         })
         return data;
     }
 
-    function getRequest(url) {
+    function postRequest(url, body) {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest ( {
-                method:     'GET',
+                method:     'POST',
                 url:        url,
+                data: JSON.stringify(body),
+                headers: {
+                    "Content-Type": "application/json;charset=UTF-8"
+                },
                 onload:     function (responseDetails) {
                     if (responseDetails.status==200){
                         resolve(responseDetails.responseText);
@@ -273,6 +270,32 @@ for get your chat_id ask chatIDrobot:
                 }
             } );
         })
+    }
+
+    let token10Bis = null;
+    async function get10BisToken(){
+        if(token10Bis) return token10Bis;
+        return new Promise((resolve, reject) => {
+            window.addEventListener ("message", (event)=>{
+                if(event.data.token){
+                    token10Bis = event.data.token;
+                    resolve(event.data.token);
+                }
+                else{
+                    reject();
+                }
+            }, false);
+            window.open ("https://www.10bis.co.il/next/user-report?dateBias=0");
+        });
+    }
+
+    // run at 10bis site
+    function token10bisSender(){
+        if(window.opener){
+            let token = document.cookie.split(';').find((cookie)=>{return cookie.trim().startsWith("uid=")}).substr(5);
+            window.opener.postMessage ({token: token}, "*");
+            window.close ();
+        }
     }
 
     async function sendUpdate(type,text,photo_elm){
@@ -314,4 +337,12 @@ for get your chat_id ask chatIDrobot:
         return (await fetch(image)).blob();
     }
 
+    if (location.href.includes("www.10bis.co.il")) {
+        token10bisSender();
+    }
+    else{
+        buildStyle();
+        setInterval(start, 1000);
+        start();
+    }
 })();
