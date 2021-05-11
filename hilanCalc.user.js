@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         hilanCalc
-// @version      3.4.4
+// @version      3.4.5
 // @description  calculate monthly working hours
 // @author       Daniel Erez
 // @match        https://*.net.hilan.co.il/Hilannetv2/*
@@ -228,8 +228,10 @@ for get your chat_id ask chatIDrobot:
         var res = await postRequest("https://www.10bis.co.il/NextApi/UserTransactionsReport", {
             Culture: "he-IL",
             DateBias: monthDiff,
-            UiCulture: "he",
-            UserToken: await get10BisToken()
+            UiCulture: "he"
+        },
+        {
+            "User-token": await get10BisToken()
         });
         res = JSON.parse(res);
         res.Data.totals.payments.forEach(payment =>{
@@ -251,14 +253,15 @@ for get your chat_id ask chatIDrobot:
         return data;
     }
 
-    function postRequest(url, body) {
+    function postRequest(url, body, headers) {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest ( {
                 method:     'POST',
                 url:        url,
                 data: JSON.stringify(body),
                 headers: {
-                    "Content-Type": "application/json;charset=UTF-8"
+                    "Content-Type": "application/json;charset=UTF-8",
+                    ...headers
                 },
                 onload:     function (responseDetails) {
                     if (responseDetails.status==200){
